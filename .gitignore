@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.parquet
+node_modules/
+dist/
+build/
+.env
+.venv/
+env/
+*.log
+.DS_Store
+archive/
