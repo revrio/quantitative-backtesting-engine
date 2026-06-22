@@ -97,6 +97,12 @@ def flatten_multiindex(data: pd.DataFrame) -> pd.DataFrame:
     keep = [c for c in ["Date", "Open", "High", "Low", "Close", "Volume", "Ticker"] if c in flat.columns]
     flat = flat[keep]
     flat = flat.sort_values(["Ticker", "Date"]).reset_index(drop=True)
+    
+    # Memory optimization: Convert 64-bit floats to 32-bit to prevent Render OOM
+    for c in ["Open", "High", "Low", "Close", "Volume"]:
+        if c in flat.columns:
+            flat[c] = flat[c].astype("float32")
+            
     return flat
 def save_to_parquet(data: pd.DataFrame, path: str | Path = "historical_data.parquet") -> Path:
     """Persist the downloaded DataFrame to a Parquet file.

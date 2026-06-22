@@ -75,7 +75,7 @@ def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
         condlist=[long_mask, short_mask],
         choicelist=[1, -1],
         default=0,
-    )
+    ).astype("int8")
     return out
 def generate_signals2(df):
     """
