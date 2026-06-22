@@ -1,4 +1,5 @@
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+const rawAPI = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+const API = rawAPI.replace(/\/+$/, '');
 export async function scanMarket(universe) {
   const res = await fetch(`${API}/scan`, {
     method: 'POST',

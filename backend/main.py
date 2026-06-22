@@ -38,6 +38,14 @@ def get_parquet_path(universe: str) -> str:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/")
+def read_root():
+    return {
+        "status": "online", 
+        "message": "Quantitative Backtesting Engine API is running! Please use the frontend application to interact with the backtester.",
+        "docs": "/docs"
+    }
 @app.post("/scan")
 def scan_endpoint(req: ScanRequest):
     path = get_parquet_path(req.universe)
