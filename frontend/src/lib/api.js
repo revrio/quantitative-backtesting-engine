@@ -55,3 +55,12 @@ export async function getDataStatus() {
   }
   return res.json();
 }
+
+export async function checkDownloadStatus(universe) {
+  const res = await fetch(`${API}/download-status/${universe}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Failed to check download status (${res.status})`);
+  }
+  return res.json();
+}

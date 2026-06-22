@@ -1,5 +1,5 @@
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -12,7 +12,9 @@ from patterns import calculate_patterns
 from signals import generate_signals
 from backtester import run_api_backtest
 from universe import get_universe
-app = FastAPI(title="StockPulse API")
+
+DOWNLOAD_STATUS = {}
+app = FastAPI(title="Quantitative Backtesting Engine API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -40,18 +42,34 @@ def health():
 def scan_endpoint(req: ScanRequest):
     path = get_parquet_path(req.universe)
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Data not found. Please refresh data first.")
+        raise HTTPException(status_code=404, detail="Data not found. The server may have restarted and cleared its temporary storage. Please click 'Refresh Data' to download the latest market data.")
     tickers = get_universe(req.universe)
     return run_scan(path, req.universe, tickers)
 @app.post("/refresh")
-def refresh_endpoint(req: RefreshRequest):
+def refresh_endpoint(req: RefreshRequest, background_tasks: BackgroundTasks):
+    if DOWNLOAD_STATUS.get(req.universe) == "downloading":
+        return {"status": "started", "message": "Already downloading."}
+        
     path = f"data/{req.universe}.parquet"
-    return refresh_and_save(req.universe, path)
+    
+    def task():
+        DOWNLOAD_STATUS[req.universe] = "downloading"
+        try:
+            refresh_and_save(req.universe, path)
+        finally:
+            DOWNLOAD_STATUS[req.universe] = "done"
+
+    background_tasks.add_task(task)
+    return {"status": "started", "message": f"Downloading data for {req.universe} in the background."}
+
+@app.get("/download-status/{universe}")
+def download_status(universe: str):
+    return {"status": DOWNLOAD_STATUS.get(universe, "done")}
 @app.post("/backtest")
 def backtest_endpoint(req: BacktestRequest):
     path = get_parquet_path(req.universe)
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Data not found. Please refresh data first.")
+        raise HTTPException(status_code=404, detail="Data not found. The server may have restarted and cleared its temporary storage. Please click 'Refresh Data' to download the latest market data.")
     df = pd.read_parquet(path)
     if req.ticker and req.ticker.lower() != "all":
         df = df[df["Ticker"] == req.ticker].copy()

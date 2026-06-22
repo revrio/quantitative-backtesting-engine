@@ -1,6 +1,6 @@
-# StockPulse
+# Quantitative Backtesting Engine
 
-StockPulse is a complete, unified Quantitative Backtesting and Screening Platform built with Python (FastAPI + vectorbt) and React (Vite + TailwindCSS + Recharts).
+Quantitative Backtesting Engine is a complete, unified Quantitative Backtesting and Screening Platform built with Python (FastAPI + vectorbt) and React (Vite + TailwindCSS + Recharts).
 
 ## Architecture
 

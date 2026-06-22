@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Download, Play, Star, StarOff, X } from 'lucide-react';
-import { scanMarket, refreshData } from '../lib/api';
+import { scanMarket, refreshData, checkDownloadStatus } from '../lib/api';
 export default function Screener() {
   const [universe, setUniverse] = useState('nifty500');
   const [loading, setLoading] = useState(false);
@@ -13,14 +13,14 @@ export default function Screener() {
   const [activeTab, setActiveTab] = useState('screener');
   const [watchlist, setWatchlist] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('stockpulse_watchlist')) || [];
+      return JSON.parse(localStorage.getItem('qbe_watchlist')) || [];
     } catch {
       return [];
     }
   });
   const [chartSymbol, setChartSymbol] = useState(null);
   useEffect(() => {
-    localStorage.setItem('stockpulse_watchlist', JSON.stringify(watchlist));
+    localStorage.setItem('qbe_watchlist', JSON.stringify(watchlist));
   }, [watchlist]);
   const handleScan = async () => {
     setLoading(true);
@@ -39,6 +39,14 @@ export default function Screener() {
     setError(null);
     try {
       await refreshData(universe);
+      
+      let status = 'downloading';
+      while (status === 'downloading') {
+        await new Promise(r => setTimeout(r, 2000));
+        const data = await checkDownloadStatus(universe);
+        status = data.status;
+      }
+      
       await handleScan();
     } catch (err) {
       setError(err.message);

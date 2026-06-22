@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Info, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Area, AreaChart, ReferenceLine, BarChart, Bar, Cell } from 'recharts';
-import { runBacktest, getSymbols, refreshData } from '../lib/api';
+import { runBacktest, getSymbols, refreshData, checkDownloadStatus } from '../lib/api';
 export default function Backtester() {
   const [universe, setUniverse] = useState('nifty500');
   const [mode, setMode] = useState('portfolio');
@@ -34,6 +34,13 @@ export default function Backtester() {
     setError(null);
     try {
       await refreshData(universe);
+      
+      let status = 'downloading';
+      while (status === 'downloading') {
+        await new Promise(r => setTimeout(r, 2000));
+        const data = await checkDownloadStatus(universe);
+        status = data.status;
+      }
     } catch (err) {
       setError(err.message);
     } finally {
