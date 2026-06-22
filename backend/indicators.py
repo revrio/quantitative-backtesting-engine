@@ -7,63 +7,41 @@ Python-level ``for`` loops.
 from __future__ import annotations
 import numpy as np
 import pandas as pd
-def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
-    """Wilder-style RSI using exponential weighted moving average.
-    Translated from the original ``indicators.py`` ``_rsi`` function.
-    Uses ``ewm(alpha=1/period)`` which matches Wilder's smoothing.
-    """
-    delta = close.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
-    avg_loss = loss.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
-    rs = avg_gain / avg_loss.mask(avg_loss == 0)
-    rsi = 100 - (100 / (1 + rs))
-    return rsi.mask(avg_loss == 0, 100)
-def _macd(close: pd.Series) -> pd.DataFrame:
-    """MACD line and Signal line.
-    Translated from the original ``indicators.py``:
-      - MACD  = EMA-12 − EMA-26
-      - Signal = EMA-9 of MACD
-    """
-    ema_12 = close.ewm(span=12, adjust=False, min_periods=12).mean()
-    ema_26 = close.ewm(span=26, adjust=False, min_periods=26).mean()
-    macd_line = ema_12 - ema_26
-    macd_signal = macd_line.ewm(span=9, adjust=False, min_periods=9).mean()
-    return pd.DataFrame({"MACD": macd_line, "MACD_Signal": macd_signal}, index=close.index)
+
 def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Add technical indicator columns to a flat OHLCV + Ticker DataFrame.
-    All computations are fully vectorized via ``groupby("Ticker")`` —
-    **no Python-level for loops**.
-    Added columns
-    -------------
-    - ``RSI_14``       – 14-period Wilder RSI
-    - ``MACD``         – 12/26 EMA difference
-    - ``MACD_Signal``  – 9-period EMA of MACD
-    - ``Volume_SMA_10``– 10-day simple moving average of Volume
-    - ``Trend_Up``     – 1 if Close > previous day's 20-day rolling High, else 0
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Must contain columns: ``Close``, ``High``, ``Volume``, ``Ticker``.
-        Rows should be sorted by ``[Ticker, Date]`` (as produced by
-        :func:`data_pipeline.flatten_multiindex`).
-    Returns
-    -------
-    pd.DataFrame
-        The input DataFrame with the new indicator columns appended.
+    All computations are fully vectorized globally — avoiding memory-heavy pandas groupby.
     """
     out = df.copy()
     out = out.sort_values(["Ticker", "Date"]).reset_index(drop=True)
-    g = out.groupby("Ticker", sort=False)
-    out["RSI_14"] = g["Close"].transform(lambda s: _rsi(s, period=14))
-    macd_df = g["Close"].apply(_macd)
-    out["MACD"] = macd_df["MACD"].values
-    out["MACD_Signal"] = macd_df["MACD_Signal"].values
-    out["Volume_SMA_10"] = g["Volume"].transform(
-        lambda s: s.rolling(window=10, min_periods=10).mean()
-    )
-    ema_fast = g["Close"].transform(lambda x: x.ewm(span=9, adjust=False).mean())
-    ema_slow = g["Close"].transform(lambda x: x.ewm(span=21, adjust=False).mean())
-    out["Trend_State"] = np.where(ema_fast > ema_slow, 1, np.where(ema_fast < ema_slow, -1, 0))
+    
+    same_t1 = out["Ticker"] == out["Ticker"].shift(1)
+    same_t10 = out["Ticker"] == out["Ticker"].shift(10)
+    
+    # RSI (14)
+    delta = out["Close"].diff().where(same_t1)
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+    avg_loss = loss.ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+    rs = avg_gain / avg_loss.mask(avg_loss == 0)
+    rsi = 100 - (100 / (1 + rs))
+    out["RSI_14"] = rsi.mask(avg_loss == 0, 100)
+    
+    # MACD
+    ema_12 = out["Close"].ewm(span=12, adjust=False, min_periods=12).mean()
+    ema_26 = out["Close"].ewm(span=26, adjust=False, min_periods=26).mean()
+    macd_line = ema_12 - ema_26
+    macd_signal = macd_line.ewm(span=9, adjust=False, min_periods=9).mean()
+    out["MACD"] = macd_line
+    out["MACD_Signal"] = macd_signal
+    
+    # Volume SMA 10
+    out["Volume_SMA_10"] = out["Volume"].rolling(window=10, min_periods=10).mean().where(same_t10)
+    
+    # Trend State
+    ema_fast = out["Close"].ewm(span=9, adjust=False).mean()
+    ema_slow = out["Close"].ewm(span=21, adjust=False).mean()
+    out["Trend_State"] = np.where(ema_fast > ema_slow, 1, np.where(ema_fast < ema_slow, -1, 0)).astype("int8")
+    
     return out

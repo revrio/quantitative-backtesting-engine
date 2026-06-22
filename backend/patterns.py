@@ -40,23 +40,29 @@ def calculate_patterns(df: pd.DataFrame) -> pd.DataFrame:
     out["_Midpoint"] = (out["Open"] + out["Close"]) / 2
     out["_Upper_Shadow"] = out["High"] - out[["Open", "Close"]].max(axis=1)
     out["_Lower_Shadow"] = out[["Open", "Close"]].min(axis=1) - out["Low"]
-    g = out.groupby("Ticker", sort=False)
-    prev_open   = g["Open"].shift(1)
-    prev_close  = g["Close"].shift(1)
-    prev_body   = g["_Body"].shift(1)
-    prev_range  = g["_Range"].shift(1)
-    prev_midpoint = g["_Midpoint"].shift(1)
+    same_t1 = out["Ticker"] == out["Ticker"].shift(1)
+    same_t2 = out["Ticker"] == out["Ticker"].shift(2)
+    same_t3 = out["Ticker"] == out["Ticker"].shift(3)
+
+    prev_open   = out["Open"].shift(1).where(same_t1)
+    prev_close  = out["Close"].shift(1).where(same_t1)
+    prev_body   = out["_Body"].shift(1).where(same_t1)
+    prev_range  = out["_Range"].shift(1).where(same_t1)
+    prev_midpoint = out["_Midpoint"].shift(1).where(same_t1)
     prev_long_body = (prev_body >= 0.45 * prev_range)
     prev_oc_max = pd.concat([prev_open, prev_close], axis=1).max(axis=1)
     prev_oc_min = pd.concat([prev_open, prev_close], axis=1).min(axis=1)
-    prev2_open     = g["Open"].shift(2)
-    prev2_close    = g["Close"].shift(2)
-    prev2_body     = g["_Body"].shift(2)
-    prev2_range    = g["_Range"].shift(2)
-    prev2_midpoint = g["_Midpoint"].shift(2)
+
+    prev2_open     = out["Open"].shift(2).where(same_t2)
+    prev2_close    = out["Close"].shift(2).where(same_t2)
+    prev2_body     = out["_Body"].shift(2).where(same_t2)
+    prev2_range    = out["_Range"].shift(2).where(same_t2)
+    prev2_midpoint = out["_Midpoint"].shift(2).where(same_t2)
     prev2_long_body = (prev2_body >= 0.45 * prev2_range)
-    close_1 = g["Close"].shift(1)
-    close_3 = g["Close"].shift(3)
+
+    close_1 = out["Close"].shift(1).where(same_t1)
+    close_3 = out["Close"].shift(3).where(same_t3)
+
     valid_current = (
         out[["Open", "High", "Low", "Close", "_Body", "_Range"]].notna().all(axis=1)
         & (out["_Range"] > 0)
@@ -64,9 +70,10 @@ def calculate_patterns(df: pd.DataFrame) -> pd.DataFrame:
         & (out["Low"] <= out[["Open", "Close"]].min(axis=1))
     )
     out["_valid"] = valid_current
-    valid_prev_1 = g["_valid"].shift(1).fillna(False).astype(bool)
-    valid_prev_2 = g["_valid"].shift(2).fillna(False).astype(bool)
-    valid_prev_3 = g["_valid"].shift(3).fillna(False).astype(bool)
+    
+    valid_prev_1 = (valid_current.shift(1).fillna(False) & same_t1).astype(bool)
+    valid_prev_2 = (valid_current.shift(2).fillna(False) & same_t2).astype(bool)
+    valid_prev_3 = (valid_current.shift(3).fillna(False) & same_t3).astype(bool)
     def _umbrella_shape(tol: float) -> pd.Series:
         """Small body, long lower shadow, tiny upper shadow."""
         return (
@@ -90,7 +97,7 @@ def calculate_patterns(df: pd.DataFrame) -> pd.DataFrame:
     def _prior_uptrend(tol: float) -> pd.Series:
         return close_1 > close_3 * (1 + tol)
     def _strict_or_flex(strict_mask: pd.Series, flex_mask: pd.Series) -> pd.Series:
-        return (strict_mask | flex_mask).astype(int)
+        return (strict_mask | flex_mask).astype("int8")
     def _bullish_engulfing(tol: float) -> pd.Series:
         return (
             valid_current & valid_prev_1
